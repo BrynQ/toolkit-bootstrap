@@ -38,14 +38,22 @@ fi
 
 # ── 2. GitHub auth (SSH git protocol + the scopes the wizard needs) ──────────
 # `-p ssh` makes git operations use SSH: gh walks the user through generating
-# and uploading an SSH key (interactive, in their own terminal) and sets
-# git_protocol=ssh, so every later `gh repo clone <slug>` comes down as an SSH
-# remote. `-w` keeps the token step browser-based, as before. Scopes: project +
-# read:org for the board, user:email so the wizard can pre-fill the verified
-# email for the git-identity step.
+# and uploading an SSH key (interactive) and sets git_protocol=ssh, so every
+# later `gh repo clone <slug>` comes down as an SSH remote. `-w` keeps the token
+# step browser-based, as before. Scopes: project + read:org for the board,
+# user:email so the wizard can pre-fill the verified email for the git-identity
+# step.
+#
+# `< /dev/tty` is essential: this script is run via `curl … | bash`, so stdin is
+# the pipe carrying the script, not the keyboard. Without a TTY, gh can't show
+# its interactive "Generate a new SSH key?" prompt, so it silently SKIPS key
+# generation/upload (and never requests the admin:public_key scope) while still
+# setting git_protocol=ssh — leaving every clone to fail with
+# "Permission denied (publickey)". Redirecting stdin from the controlling
+# terminal lets gh's SSH flow run exactly as it does when typed by hand.
 if ! gh auth status >/dev/null 2>&1; then
     say "Signing in to GitHub (SSH)…"
-    gh auth login -h github.com -p ssh -s project,read:org,user:email -w
+    gh auth login -h github.com -p ssh -s project,read:org,user:email -w < /dev/tty
 fi
 
 # ── 3. Resolve the data-analytics base + clone/reuse the toolkit ────────────
