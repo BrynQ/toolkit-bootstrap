@@ -36,10 +36,16 @@ if ! command -v git >/dev/null 2>&1 || ! command -v gh >/dev/null 2>&1; then
     fi
 fi
 
-# ── 2. GitHub auth (also grants the board scopes the wizard needs) ───────────
+# ── 2. GitHub auth (SSH git protocol + the scopes the wizard needs) ──────────
+# `-p ssh` makes git operations use SSH: gh walks the user through generating
+# and uploading an SSH key (interactive, in their own terminal) and sets
+# git_protocol=ssh, so every later `gh repo clone <slug>` comes down as an SSH
+# remote. `-w` keeps the token step browser-based, as before. Scopes: project +
+# read:org for the board, user:email so the wizard can pre-fill the verified
+# email for the git-identity step.
 if ! gh auth status >/dev/null 2>&1; then
-    say "Signing in to GitHub…"
-    gh auth login -h github.com -s project,read:org -w
+    say "Signing in to GitHub (SSH)…"
+    gh auth login -h github.com -p ssh -s project,read:org,user:email -w
 fi
 
 # ── 3. Resolve the data-analytics base + clone/reuse the toolkit ────────────
