@@ -43,23 +43,24 @@ $wslArgs = "-- bash -lc `"$inner`""
 
 # ── 2. Refuse to create a shortcut that would fail on click ─────────────────
 Write-Step "Checking the toolkit is installed in WSL ..."
+# `throw`, not `Write-Error` + `exit`: this script is normally run as
+# `irm ... | iex`, which evaluates in the caller's session, so a bare `exit`
+# would close the user's PowerShell window instead of just aborting.
 try {
     # Probe exactly what the shortcut invokes. A login shell is required: the
     # toolkit puts ~/.local/bin on PATH from .profile, which a non-login
     # `bash -c` never reads.
     $probe = & wsl.exe -- bash -lc "command -v brynq-orchestrate-web && command -v tmux" 2>$null
 } catch {
-    Write-Error "Could not run wsl.exe. Install WSL first - see https://github.com/BrynQ/toolkit-bootstrap"
-    exit 1
+    throw "Could not run wsl.exe. Install WSL first - see https://github.com/BrynQ/toolkit-bootstrap"
 }
 if ($LASTEXITCODE -ne 0 -or -not $probe) {
-    Write-Error @"
+    throw @"
 The toolkit is not installed in your default WSL distro (brynq-orchestrate-web
 and/or tmux not found on PATH). Install it first, in a WSL shell:
 
     curl -fsSL https://raw.githubusercontent.com/BrynQ/toolkit-bootstrap/main/bootstrap.sh | bash
 "@
-    exit 1
 }
 
 # ── 3. Icon ─────────────────────────────────────────────────────────────────
@@ -67,9 +68,14 @@ and/or tmux not found on PATH). Install it first, in a WSL shell:
 # (the blue hub-and-spoke node graph) is fetched to a stable path. Best-effort:
 # a failure here leaves the shortcut with the terminal's default icon rather
 # than aborting an otherwise-working install.
+#
+# $env:BRYNQ_SHORTCUT_ICON_URL overrides the source. An env var rather than a
+# `param()` because parameters are unreachable through `irm | iex` — this is how
+# you test the script from a branch, whose assets/ is not on main yet.
 $iconDir  = Join-Path $env:LOCALAPPDATA "BrynQ"
 $iconPath = Join-Path $iconDir "agents.ico"
-$iconUrl  = "https://raw.githubusercontent.com/BrynQ/toolkit-bootstrap/main/assets/agents.ico"
+$iconUrl  = if ($env:BRYNQ_SHORTCUT_ICON_URL) { $env:BRYNQ_SHORTCUT_ICON_URL } `
+            else { "https://raw.githubusercontent.com/BrynQ/toolkit-bootstrap/main/assets/agents.ico" }
 $icon     = $null
 try {
     Write-Step "Fetching icon ..."
