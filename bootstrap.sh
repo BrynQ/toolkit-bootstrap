@@ -10,17 +10,48 @@
 #   4. run the toolkit's own bootstrap → opens the wizard at http://127.0.0.1:8421
 #
 # Contains no secrets. The private clone is gated by your GitHub login.
+#
+# CANONICAL SOURCE for BrynQ/toolkit-bootstrap/bootstrap.sh — the file the curl
+# one-liner above actually fetches. Publish any edit to both, byte for byte.
 set -euo pipefail
 
 say() { echo "  $*"; }
 
+# gh floor — keep in sync with GH_MIN_VERSION in brynq_devtools/kits/ai_toolkit.py.
+GH_MIN=(2 73 0)
+GH_MIN_STR="${GH_MIN[0]}.${GH_MIN[1]}.${GH_MIN[2]}"
+
+# `gh --version` prints e.g. `gh version 2.46.0 (2025-12-13 Ubuntu 2.46.0-4)`.
+# Only the first number is the upstream version — the trailing one is the distro
+# packaging revision and the date is the *packaging* date, so neither says how
+# old the build is. False only when gh is absent or provably below the floor: an
+# unparseable version is deliberately not held against it, so a future format
+# change cannot make every run reinstall gh from the official repo.
+gh_version_ok() {
+    local out
+    command -v gh >/dev/null 2>&1 || return 1
+    out="$(gh --version 2>/dev/null)" || return 0
+    [[ "${out}" =~ gh\ version\ ([0-9]+)\.([0-9]+)\.([0-9]+) ]] || return 0
+    (( BASH_REMATCH[1] * 1000000 + BASH_REMATCH[2] * 1000 + BASH_REMATCH[3] \
+       >= GH_MIN[0] * 1000000 + GH_MIN[1] * 1000 + GH_MIN[2] ))
+}
+
 # ── 1. git + gh (enough to authenticate + clone) ────────────────────────────
-if ! command -v git >/dev/null 2>&1 || ! command -v gh >/dev/null 2>&1; then
+# The installed version, not apt's exit code, is the success condition. Ubuntu
+# ships gh in `universe` frozen at 2.46.0, so `apt-get install gh` *succeeds*
+# and leaves behind a build that aborts on `gh issue view --comments`,
+# `gh issue edit` and `gh pr view/edit` — it asks GraphQL for the sunset
+# Projects-classic field and treats the error as fatal. `apt upgrade` never
+# repairs it either, because universe offers no newer candidate; only GitHub's
+# official repo carries a current build.
+if ! command -v git >/dev/null 2>&1 || ! gh_version_ok; then
     if command -v apt-get >/dev/null 2>&1; then
         say "Installing git + gh (sudo password once)…"
         sudo apt-get update -qq || true
-        sudo apt-get install -y -qq git gh 2>/dev/null || {
-            # gh may not be in the distro repo → add the official one.
+        sudo apt-get install -y -qq git gh 2>/dev/null || true
+        if ! gh_version_ok; then
+            say "Distro gh is absent or older than ${GH_MIN_STR} — installing from GitHub's official repo…"
+            type -p wget >/dev/null || sudo apt-get install -y -qq wget
             sudo mkdir -p -m 755 /etc/apt/keyrings
             wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg \
                 | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg >/dev/null
@@ -28,12 +59,13 @@ if ! command -v git >/dev/null 2>&1 || ! command -v gh >/dev/null 2>&1; then
             echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
                 | sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
             sudo apt-get update -qq && sudo apt-get install -y -qq git gh
-        }
+        fi
     elif command -v brew >/dev/null 2>&1; then
         brew install git gh
     else
         echo "ERROR: need apt-get or brew to install git + gh." >&2; exit 1
     fi
+    gh_version_ok || say "! gh is still below ${GH_MIN_STR} — \`gh issue view --comments\` and \`gh pr edit\` will fail. Run \`bd toolkit doctor\` after setup."
 fi
 
 # ── 2. GitHub auth (SSH git protocol + the scopes the wizard needs) ──────────
