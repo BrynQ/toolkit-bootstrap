@@ -37,10 +37,19 @@ desktop. In a **normal** PowerShell — no administrator rights needed:
 irm https://raw.githubusercontent.com/BrynQ/toolkit-bootstrap/main/shortcut.ps1 | iex
 ```
 
-Clicking it starts the dashboard inside a persistent tmux session named `agents`
-and attaches to it. Closing the window leaves the dashboard running; clicking
-again re-attaches to the same session rather than starting a second one. Detach
-without stopping it with `Ctrl-b` then `d`.
+Clicking it starts the dashboard inside a tmux session named `agents` and
+attaches to it. Closing the window leaves the dashboard running; clicking again
+re-attaches to the same session rather than starting a second one. Detach without
+stopping it with `Ctrl-b` then `d`.
+
+It also installs a **WSL keep-alive anchor** at logon (a hidden `.vbs` in your
+Startup folder). This is not optional dressing — WSL terminates a distro when its
+last session closes, which takes the tmux *server* down with it, so without the
+anchor closing the window kills the dashboard and every agent session. Note that
+the `.wslconfig` idle-timeout settings most write-ups recommend do **not** fix
+this: they govern the VM, not the distro instance
+([microsoft/WSL#9245](https://github.com/microsoft/WSL/discussions/9245)).
+Deleting the `.vbs` disables the anchor.
 
 Equivalent to typing `agents` in a WSL shell (the function `setup.sh` installs
 in your `~/.bashrc`) — the shortcut just saves opening a terminal first. Safe to
